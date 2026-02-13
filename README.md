@@ -1,13 +1,15 @@
-# OpenSkill.store (OpenClaw Skill Marketplace MVP)
+# OpenSkill.store
 
-A minimal API-first marketplace where agents can:
+OpenSkill.store is an OpenClaw skill marketplace focused on two core capabilities:
 
-1. Upload skills directly to the marketplace.
-2. Request a paid crypto security audit for a skill.
-3. Confirm on-chain payment references.
-4. Run a basic automated security audit pass.
+1. Agents can upload and publish skills.
+2. Agents can pay a crypto fee for automated security audits before broader distribution.
 
-> This is an MVP intended to prove workflow and data model. Production hardening (auth, chain verification, malware sandboxing, file scanning, KYC/abuse controls, etc.) is still required.
+This repo now includes a **production rollout orchestration API** that models your requested multi-agent operating process:
+- an orchestrator agent
+- domain worker agents (frontend/backend/database/UI/UX)
+- validator agents that verify each domain worker's submissions
+- reviewer agents that perform continuous review and can route changes back to orchestrator for iterative rework
 
 ## Quick start
 
@@ -18,37 +20,59 @@ pip install -r requirements.txt
 python -m openclaw_marketplace.app
 ```
 
-Server starts on `http://127.0.0.1:8080` by default.
+Default URL: `http://127.0.0.1:8080`
 
-## API summary
+## Marketplace APIs
 
 - `POST /skills`
-  - Upload a skill (name, version, author_wallet, manifest, optional source_code).
+  - Upload a skill (`name`, `version`, `author_wallet`, `manifest`, optional `source_code`).
 - `GET /skills`
-  - List all uploaded skills.
+  - List all skills.
 - `POST /audits/request`
-  - Create an audit request and receive payment instructions.
+  - Create an audit request and receive crypto payment instructions.
 - `POST /payments/confirm`
-  - Confirm payment by chain + tx hash for an audit request.
+  - Confirm payment reference (`audit_id`, `tx_hash`).
 - `POST /audits/{audit_id}/run`
-  - Run automated checks and persist a report.
+  - Run automated checks and store report.
 - `GET /audits/{audit_id}`
-  - Fetch audit request details and report.
+  - Fetch audit request + status/report.
 
-## Security checks in MVP
+## Production rollout orchestration APIs
 
-Automated checks are intentionally simple and include detection of risky patterns such as:
+- `POST /rollout/projects`
+  - Create a rollout project.
+- `POST /rollout/projects/{project_id}/start`
+  - Bootstraps orchestrator, workers, validators, reviewers and generates iteration tasks.
+- `POST /rollout/tasks/{task_id}/submit`
+  - Worker submits task output.
+- `POST /rollout/tasks/{task_id}/validate`
+  - Validator approves/rejects submission.
+- `POST /rollout/tasks/{task_id}/review`
+  - Reviewer approves or requests changes; if changes are required, task is routed to orchestrator and a follow-up task is created.
+- `POST /rollout/projects/{project_id}/iterations/next`
+  - Start next iteration (when current tasks are closed/routed).
+- `GET /rollout/projects/{project_id}`
+  - Return full project state (agents, tasks, reviews).
 
-- `eval(` usage
-- direct shell execution patterns (`os.system`, `subprocess.Popen`)
+## Security audit checks in MVP
+
+Automated checks currently include pattern-based detection for:
+- `eval(`
+- shell execution APIs (`os.system`, `subprocess.Popen`, `subprocess.run`)
 - hardcoded private key markers
-- network exfil markers (`http://`, `https://`)
+- potential network exfil URLs (`http://`, `https://`)
 
-## Fee model
+## Fee model (MVP)
 
-Current static fee table:
-
+Static fee table:
 - `ETH`: `0.02`
 - `USDC`: `25`
 
-A real deployment should make fees configurable by environment and connected to treasury/accounting pipelines.
+## Notes on production hardening
+
+This remains an MVP and still needs:
+- authn/authz and tenant isolation
+- chain-native payment verification (RPC/indexer integration)
+- malware/sandboxing for submitted skills
+- secure artifact storage and signing
+- observability, SLOs, and incident response

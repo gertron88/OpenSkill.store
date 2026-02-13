@@ -71,6 +71,45 @@ class MarketplaceApiTests(unittest.TestCase):
         self.assertGreaterEqual(report["risk_score"], 35)
         self.assertEqual(report["verdict"], "review_required")
 
+    def test_rollout_multi_agent_iterative_flow(self):
+        created = self.client.post("/rollout/projects", json={"name": "OpenSkill production rollout"})
+        self.assertEqual(created.status_code, 201)
+        project_id = created.get_json()["project_id"]
+
+        started = self.client.post(f"/rollout/projects/{project_id}/start")
+        self.assertEqual(started.status_code, 201)
+        tasks = started.get_json()["tasks"]
+        self.assertEqual(len(tasks), 4)
+
+        first_task_id = tasks[0]["task_id"]
+
+        submitted = self.client.post(f"/rollout/tasks/{first_task_id}/submit", json={"notes": "implemented"})
+        self.assertEqual(submitted.status_code, 200)
+
+        validated = self.client.post(
+            f"/rollout/tasks/{first_task_id}/validate",
+            json={"decision": "approved", "notes": "validator sign-off"},
+        )
+        self.assertEqual(validated.status_code, 200)
+
+        project_view = self.client.get(f"/rollout/projects/{project_id}")
+        self.assertEqual(project_view.status_code, 200)
+        reviewers = [agent for agent in project_view.get_json()["agents"] if agent["role"] == "reviewer"]
+        self.assertGreaterEqual(len(reviewers), 1)
+
+        reviewed = self.client.post(
+            f"/rollout/tasks/{first_task_id}/review",
+            json={
+                "reviewer_agent_id": reviewers[0]["id"],
+                "decision": "changes_required",
+                "notes": "Need stronger threat model coverage",
+            },
+        )
+        self.assertEqual(reviewed.status_code, 200)
+        payload = reviewed.get_json()
+        self.assertEqual(payload["status"], "needs_orchestrator_routing")
+        self.assertIn("follow_up_task_id", payload)
+
 
 if __name__ == "__main__":
     unittest.main()
